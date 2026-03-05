@@ -76,31 +76,17 @@ uint64_t probe_set(int set_index) {
     return end - start;
 }
 
-// Structure to store results for sorting within a pass
+// Structure to store results for sorting
 typedef struct {
     int set_index;
     uint64_t latency;
-} PassResult;
+} Result;
 
-// Structure to store final scores
-typedef struct {
-    int set_index;
-    int score;
-} FinalScore;
-
-int compare_pass_results(const void *a, const void *b) {
-    PassResult *r1 = (PassResult *)a;
-    PassResult *r2 = (PassResult *)b;
+int compare_results(const void *a, const void *b) {
+    Result *r1 = (Result *)a;
+    Result *r2 = (Result *)b;
     if (r2->latency > r1->latency) return 1;
     if (r2->latency < r1->latency) return -1;
-    return 0;
-}
-
-int compare_final_scores(const void *a, const void *b) {
-    FinalScore *r1 = (FinalScore *)a;
-    FinalScore *r2 = (FinalScore *)b;
-    if (r2->score > r1->score) return 1;
-    if (r2->score < r1->score) return -1;
     return 0;
 }
 
@@ -122,66 +108,105 @@ int main(int argc, char const *argv[]) {
         build_set(i);
     }
 
-    printf("Scanning L2 sets (Voting/Mode Method)...\n");
-
-    int scores[1024] = {0};
+    // --- PHASE 1: CALIBRATION (Baseline) ---
+    // We assume the victim is NOT running during this phase, OR we rely on the fact that
+    // the victim only affects ONE set, while system noise affects specific sets consistently.
+    // Ideally, we would ask the user to start victim AFTER calibration.
+    // But since we can't control that, let's just measure "background" noise.
+    // If the victim IS running, it will be part of the baseline, which is bad.
+    // However, we can try to detect "spikes" relative to a "quiet" baseline.
     
-    // Parameters
-    int total_passes = 100;
-    int samples_per_pass = 200;
-    int top_n_per_pass = 3; // Vote for top 3 in each pass
+    printf("\n--- PHASE 1: BASELINE CALIBRATION ---\n");
+    printf("Measuring background noise levels for all sets...\n");
+    
+    uint64_t baseline[1024];
+    int calibration_passes = 20;
+    int samples = 200;
 
-    PassResult pass_results[1024];
+    for (int i = 0; i < 1024; i++) baseline[i] = 0;
 
-    for (int p = 0; p < total_passes; p++) {
-        if (p % 10 == 0) {
-            printf("Pass %d/%d...\n", p+1, total_passes);
-            fflush(stdout);
-        }
-
-        // 1. Measure all sets
+    for (int p = 0; p < calibration_passes; p++) {
         for (int i = 0; i < 1024; i++) {
-            uint64_t total_latency = 0;
-            for (int k = 0; k < samples_per_pass; k++) {
+            uint64_t total = 0;
+            for (int k = 0; k < samples; k++) {
                 prime_set(i);
-                for(volatile int w=0; w<2000; w++); // Wait
-                total_latency += probe_set(i);
+                // No wait or very short wait for baseline to capture "intrinsic" slowness
+                for(volatile int w=0; w<100; w++); 
+                total += probe_set(i);
             }
-            pass_results[i].set_index = i;
-            pass_results[i].latency = total_latency / samples_per_pass;
-        }
-
-        // 2. Sort to find top N hottest sets in this pass
-        qsort(pass_results, 1024, sizeof(PassResult), compare_pass_results);
-
-        // 3. Vote
-        for (int i = 0; i < top_n_per_pass; i++) {
-            scores[pass_results[i].set_index]++;
+            baseline[i] += (total / samples);
         }
     }
+    for (int i = 0; i < 1024; i++) baseline[i] /= calibration_passes;
 
-    // Prepare final results
-    FinalScore final_results[1024];
+    // Identify naturally hot sets
+    printf("Top 5 Noisiest Sets (Baseline):\n");
+    Result sorted_baseline[1024];
+    for(int i=0; i<1024; i++) {
+        sorted_baseline[i].set_index = i;
+        sorted_baseline[i].latency = baseline[i];
+    }
+    qsort(sorted_baseline, 1024, sizeof(Result), compare_results);
+    for(int i=0; i<5; i++) {
+        printf("Set %d: %llu cycles\n", sorted_baseline[i].set_index, (unsigned long long)sorted_baseline[i].latency);
+    }
+
+    // --- PHASE 2: ACTIVE SCAN ---
+    printf("\n--- PHASE 2: ACTIVE SCAN ---\n");
+    printf("Scanning for victim activity (relative to baseline)...\n");
+    
+    uint64_t active[1024];
+    int active_passes = 50;
+    
+    for (int i = 0; i < 1024; i++) active[i] = 0;
+
+    for (int p = 0; p < active_passes; p++) {
+        if (p % 10 == 0) { printf("Pass %d/%d...\n", p+1, active_passes); fflush(stdout); }
+        for (int i = 0; i < 1024; i++) {
+            uint64_t total = 0;
+            for (int k = 0; k < samples; k++) {
+                prime_set(i);
+                // Longer wait to catch victim
+                for(volatile int w=0; w<2000; w++); 
+                total += probe_set(i);
+            }
+            active[i] += (total / samples);
+        }
+    }
+    for (int i = 0; i < 1024; i++) active[i] /= active_passes;
+
+    // --- PHASE 3: DIFFERENTIAL ANALYSIS ---
+    printf("\n--- PHASE 3: ANALYSIS ---\n");
+    Result diffs[1024];
     for (int i = 0; i < 1024; i++) {
-        final_results[i].set_index = i;
-        final_results[i].score = scores[i];
+        diffs[i].set_index = i;
+        // Calculate increase relative to baseline
+        // If baseline is high, a small increase might be noise.
+        // We look for the largest ABSOLUTE increase, but maybe normalize?
+        // Let's just do simple subtraction: Active - Baseline
+        if (active[i] > baseline[i]) {
+            diffs[i].latency = active[i] - baseline[i];
+        } else {
+            diffs[i].latency = 0;
+        }
     }
 
-    // Sort by score (frequency)
-    qsort(final_results, 1024, sizeof(FinalScore), compare_final_scores);
+    qsort(diffs, 1024, sizeof(Result), compare_results);
 
-    printf("\nTop 5 Most Frequent High-Latency Sets (Max Score: %d):\n", total_passes);
+    printf("Top 5 Sets with Largest Latency Increase:\n");
     for (int i = 0; i < 5; i++) {
-        printf("Set %d: Score %d\n", final_results[i].set_index, final_results[i].score);
+        printf("Set %d: +%llu cycles (Base: %llu -> Active: %llu)\n", 
+               diffs[i].set_index, 
+               (unsigned long long)diffs[i].latency, 
+               (unsigned long long)baseline[diffs[i].set_index],
+               (unsigned long long)active[diffs[i].set_index]);
     }
 
-    // Heuristic: Pick the winner, but skip Set 0 if it's #1 and #2 is close or significant
-    int detected_flag = final_results[0].set_index;
-    if (detected_flag == 0 && final_results[1].score > (total_passes / 5)) {
-        detected_flag = final_results[1].set_index;
-    }
-
-    printf("\nDetected Flag: %d\n", detected_flag);
+    // Heuristic: The one with the biggest jump is likely the victim.
+    // System noise sets (like 879) are usually high in BOTH baseline and active,
+    // so their "diff" should be small (or at least smaller than the victim's jump).
+    
+    printf("\nDetected Flag: %d\n", diffs[0].set_index);
     
     return 0;
 }
