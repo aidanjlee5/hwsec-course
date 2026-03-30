@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 Project Team Members: Aditi Nayak, Ben Luis, Bramhi Chougule, Aidan Lee 
+=======
+Project Team Members: Aditi Nayak, Ben Luis, Bramhi Chougule, Aidan Lee 
+>>>>>>> b79e45412eee306a7c7f2f38c7c6e7a44876ff6a
 
 ## Optional
 

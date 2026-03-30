@@ -38,6 +38,12 @@ int main (int ac, char **av) {
             eviction_buffer[k] = k;
         }
     }
+    if (eviction_buffer != NULL) {
+        // Initialize buffer to ensure physical pages are allocated (prevent zero-page optimization)
+        for (uint64_t k = 0; k < (L3_SIZE * 4) / sizeof(uint64_t); k++) {
+            eviction_buffer[k] = k;
+        }
+    }
 
     // Example: Measure L1 access latency, store results in l1_latency array
     for (int i=0; i<SAMPLES; i++){
@@ -77,6 +83,15 @@ int main (int ac, char **av) {
         // Step 3: Measure access (should miss L1, hit L2)
         l2_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
     }
+        
+        // Step 2: Evict from L1 by accessing a buffer size of L1_SIZE
+        // We stride by 64 bytes (cache line size) to touch every set
+        for (int j = 0; j < (4 * L1_SIZE) / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
+             tmp = (char)eviction_buffer[j];
+        }
+        // Step 3: Measure access (should miss L1, hit L2)
+        l2_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
 
     // ======
     // [1.2] TODO: Measure L3 Latency, store results in l3_latency array
@@ -99,7 +114,7 @@ int main (int ac, char **av) {
     // Print the results to the screen
     // [1.5] Change print_results to print_results_for_python so that your code will work
     // with the python plotter software
-    print_results_for_python(dram_latency, l1_latency, l2_latency, l3_latency);
+    print_results_for_python_for_python(dram_latency, l1_latency, l2_latency, l3_latency);
 
     free(target_buffer);
 
