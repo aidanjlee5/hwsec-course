@@ -25,7 +25,17 @@ void * allocated_mem;
  */
 void setup_PPN_VPN_map(void * mem_map,
                        std::map<uint64_t, uint64_t> &PPN_VPN_map) {
-    // TODO: Exercise 1-3
+    const uint64_t memory_size = BUFFER_SIZE_MB * 1024ULL * 1024ULL;
+    for (uint64_t off = 0; off < memory_size; off += HUGE_PAGE_SIZE) {
+        uint64_t va = reinterpret_cast<uint64_t>(mem_map) + off;
+        uint64_t vpn_2m = va >> 21;
+        uint64_t pa = virt_to_phys(va);
+        if (pa == 0) {
+            continue;
+        }
+        uint64_t ppn_2m = pa >> 21;
+        PPN_VPN_map[ppn_2m] = vpn_2m;
+    }
 }
 
 /*
@@ -81,10 +91,7 @@ uint64_t virt_to_phys(uint64_t virt_addr) {
             if (fread(&entry, sizeof(uint64_t), 1, pagemap)) {
                 if (entry & (1ULL << 63)) {
                     uint64_t phys_page_number = entry & ((1ULL << 54) - 1);
-                    // TODO: Exercise 1-1
-                    // Using the extracted physical page number,
-                    // derive the physical address
-                    phys_addr = 0;
+                    phys_addr = (phys_page_number << 12) | (virt_addr & 0xFFFULL);
                 } 
             }
         }
@@ -107,8 +114,13 @@ uint64_t virt_to_phys(uint64_t virt_addr) {
  */
 
 uint64_t phys_to_virt(uint64_t phys_addr) {
-    // TODO: Exercise 1-4
-    return 0;
+    const uint64_t ppn_2m = phys_addr >> 21;
+    const uint64_t off = phys_addr & (HUGE_PAGE_SIZE - 1);
+    auto it = PPN_VPN_map.find(ppn_2m);
+    if (it == PPN_VPN_map.end()) {
+        return 0;
+    }
+    return (it->second << 21) | off;
 }
 
 
@@ -142,8 +154,19 @@ char* get_rand_addr(size_t buf_size)
  *
  */
 uint64_t measure_bank_latency(volatile char *addr_A, volatile char *addr_B) {
-    // TODO: Exercise 2-2
-    return 0; 
+    clflush(addr_A);
+    clflush(addr_B);
+    mfence();
+    lfence();
+
+    constexpr int k_pairs = 16;
+    const uint64_t t0 = rdtscp64();
+    for (int i = 0; i < k_pairs; i++) {
+        (void)*addr_A;
+        (void)*addr_B;
+    }
+    const uint64_t t1 = rdtscp64();
+    return t1 - t0;
 }
 
 /*
