@@ -11,7 +11,7 @@
 #define BANKS 16
 #define CONSISTENCY_RATE 0.95
 // TODO: Threshold derived in part2
-#define THRESHOLD 1000 
+#define THRESHOLD 400
 #define POOL_SIZE 1000
 #define ROUNDS  100
 
@@ -52,8 +52,55 @@ uint64_t median(uint64_t* vals, size_t size) {
  */
 
 std::array<std::vector<uint64_t>, BANKS> bin_rows(uint64_t starting_addr, uint64_t final_addr) {
-    // TODO - Exercise 3-1
     std::array<std::vector<uint64_t>, BANKS> bins;
+
+    auto median_latency = [](volatile char *a, volatile char *b) -> uint64_t {
+        uint64_t samples[ROUNDS];
+        for (size_t i = 0; i < ROUNDS; i++) {
+            samples[i] = measure_bank_latency(a, b);
+        }
+        return median(samples, ROUNDS);
+    };
+
+    for (uint64_t addr = starting_addr; addr < final_addr; addr += ROW_STRIDE) {
+        bool placed = false;
+
+        for (size_t i = 0; i < BANKS; i++) {
+            if (bins[i].empty()) {
+                continue;
+            }
+
+            uint64_t ref_addr = bins[i].front();
+            uint64_t lat = median_latency((volatile char *)addr, (volatile char *)ref_addr);
+
+            if (lat >= THRESHOLD) {
+                bins[i].push_back(addr);
+                placed = true;
+                break;
+            }
+        }
+
+        if (placed) {
+            continue;
+        }
+
+        for (size_t i = 0; i < BANKS; i++) {
+            if (bins[i].empty()) {
+                bins[i].push_back(addr);
+                placed = true;
+                break;
+            }
+        }
+
+        if (!placed) {
+            // Fallback: if all bins are already seeded, place into the smallest bin.
+            auto it = std::min_element(
+                bins.begin(), bins.end(),
+                [](const auto &a, const auto &b) { return a.size() < b.size(); });
+            it->push_back(addr);
+        }
+    }
+
     return bins;
 }
 

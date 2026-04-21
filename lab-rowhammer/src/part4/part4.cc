@@ -4,13 +4,22 @@
 #include "../util.hh"
 
 // TODO: Candidate id derived in part3
+#ifndef BANK_FUNC_CAND
 #define BANK_FUNC_CAND 0
+#endif
 
 // TODO: Try different combinations of these parameters to find the best ones for the machine!
-#define VIC_DATA 0x00
-#define AGG_DATA 0xff 
+#ifndef VIC_DATA
+#define VIC_DATA 0xff
+#endif
 
+#ifndef AGG_DATA
+#define AGG_DATA 0xff
+#endif
+
+#ifndef NUM_HAMMER_ATTEMPTS
 #define NUM_HAMMER_ATTEMPTS 100
+#endif
 
 
 char *dram_to_str(uint64_t phys_ptr);
@@ -28,7 +37,39 @@ char *dram_to_str(uint64_t phys_ptr);
 uint64_t hammer_addresses(uint64_t vict, uint64_t attA, uint64_t attB, uint64_t hp_base) {
                       
     uint64_t foundFlips = 0;
-    // TODO: Exercise 4-1
+    uint64_t vict_row_base = hp_base + (((vict - hp_base) >> 17) << 17);
+    uint64_t attA_row_base = hp_base + (((attA - hp_base) >> 17) << 17);
+    uint64_t attB_row_base = hp_base + (((attB - hp_base) >> 17) << 17);
+
+    // Prime: initialize victim and aggressor rows with target data patterns.
+    memset((void *)vict_row_base, VIC_DATA, ROW_SIZE);
+    memset((void *)attA_row_base, AGG_DATA, ROW_SIZE);
+    memset((void *)attB_row_base, AGG_DATA, ROW_SIZE);
+
+    mfence();
+
+    // Hammer: repeatedly alternate accesses to aggressor rows and flush from caches.
+    for (uint64_t i = 0; i < HAMMERS_PER_ITER; i++) {
+        volatile uint8_t a = *(volatile uint8_t *)attA;
+        volatile uint8_t b = *(volatile uint8_t *)attB;
+        (void)a;
+        (void)b;
+
+        clflush((volatile void *)attA);
+        clflush((volatile void *)attB);
+    }
+
+    mfence();
+
+    // Probe: any byte in victim row deviating from VIC_DATA indicates a flip.
+    uint8_t *vict_ptr = (uint8_t *)vict_row_base;
+    for (uint64_t i = 0; i < ROW_SIZE; i++) {
+        if (vict_ptr[i] != (uint8_t)VIC_DATA) {
+            foundFlips = 1;
+            break;
+        }
+    }
+
     return foundFlips; 
 }
 

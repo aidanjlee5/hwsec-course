@@ -20,6 +20,8 @@
 #define ROW_MASK 0xfffe0000
 
 // Number of hammers to perform per iteration
-#define HAMMERS_PER_ITER 5000000
+#ifndef HAMMERS_PER_ITER
+#define HAMMERS_PER_ITER 6000000
+#endif
 
 #endif
