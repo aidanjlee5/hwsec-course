@@ -21,7 +21,7 @@
 
 // Number of hammers to perform per iteration
 #ifndef HAMMERS_PER_ITER
-#define HAMMERS_PER_ITER 6000000
+#define HAMMERS_PER_ITER 5000000
 #endif
 
 #endif

@@ -7,7 +7,7 @@
 Log in to our lab machine at the ip address: **152.2.130.63**. [cite_start]To connect via ssh, run: `ssh YourGroupID@152.2.130.63` [cite: 4]
 [cite_start]You will complete this lab primarily in **C** and **C++**[cite: 5]. [cite_start]To submit your lab, you will zip your directory named `lab4-rowhammer` (cloned from git) and submit it on Canvas. [cite: 6]
 
-Username: group7
+Username: group7@152.2.130.63
 Password: l31xbpwCQJFBIS8D 
 
 [cite_start]In addition to submitting code, you are required to submit a **PDF report** containing your answers to Discussion Questions to Canvas. [cite: 7] [cite_start]Please turn in only one submission per team, and add the names of you and your partners to a file called "PARTNERS.txt" [cite: 8]
