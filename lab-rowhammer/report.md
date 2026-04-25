@@ -54,7 +54,7 @@ We know this because of the following reasons:
 When a single-bit flip is detected (syndrome != 0 and overall parity = 1), the syndrome value
 directly encodes the position of the flipped bit within the 22-bit encoded word. To correct
 the error, flip that bit back by XORing the encoded word with a 1 at the position indicated
-by the syndrome. This works because the Hamming parity equations are designed so that each
+by the syndrome. This works because Hamming parity equations are made so that each
 bit position produces a unique syndrome value.
 
 

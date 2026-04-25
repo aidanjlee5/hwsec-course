@@ -15,7 +15,7 @@ uint8_t parity_eqs[5][16] = {                 \
 uint32_t genParity(uint32_t data) {
     uint32_t parity = 0;
 
-    // Exercise 5-2: Generate parity bits P0–P4 using parity_eqs
+    // Exercise 5-2: Generate the parity bits for the data
     for (int p = 0; p < 5; p++) {
         uint32_t bit = 0;
         for (int d = 0; d < 16; d++) {
@@ -60,6 +60,7 @@ struct hamming_result findHammingErrors(uint32_t encoded) {
     // Syndrome!=0, overall=1 → SINGLE_ERROR (correctable)
     // Syndrome!=0, overall=0 → DOUBLE_ERROR (uncorrectable)
     // Syndrome=0, overall=1 → PARITY_ERROR (P5 itself flipped)
+    // As explained in the report
     _ERROR_TYPE error = NO_ERROR;
     if (syndrome == 0 && P5_Error_bit == 0) {
         error = NO_ERROR;
