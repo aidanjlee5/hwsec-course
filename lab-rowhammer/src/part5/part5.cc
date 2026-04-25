@@ -2,9 +2,7 @@
 #include "../verif.hh"
 
 // Convenience Array
-//
-// Value for row x column y is 1 iff
-// bit y is included in parity bit x
+
 uint8_t parity_eqs[5][16] = {                 \
     {1,1,0,1,1,0,1,0,1,0,1,1,0,1,0,1},        \
     {1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,0},        \
@@ -28,7 +26,7 @@ uint32_t genParity(uint32_t data) {
         parity |= (bit << p);
     }
 
-    // P5 = XOR of all data bits D0–D15 AND parity bits P0–P4
+    // P5 = XORing all of the data bits D0–D15 AND parity bits P0–P4
     uint32_t p5 = 0;
     for (int d = 0; d < 16; d++) {
         p5 ^= getBit(data, d);
@@ -44,23 +42,17 @@ uint32_t genParity(uint32_t data) {
 // Determine if there are any errors, reporting the error type and syndrome.
 struct hamming_result findHammingErrors(uint32_t encoded) {
 
-    // Break down the ECC protected value into parity and data 
     hamming_struct decoded = extractEncoding(encoded);
 
-    // Record the parity in the data, and also re-generate the parity
-    // from the data
     uint32_t recordedParity = decoded.parity;
     uint32_t regenParity = genParity(decoded.data);
 
-    // Exercise 5-4: Compute the syndrome (bits 0–4 only)
     uint32_t syndrome = (recordedParity ^ regenParity) & 0x1F;
 
-    // Exercise 5-4: Compute overall parity by XORing all 22 bits of encoded
     uint32_t overall_parity = 0;
     for (int i = 0; i < TOTAL_BITS; i++) {
         overall_parity ^= getBit(encoded, i);
     }
-    // P5 error bit: 1 means overall parity is wrong
     uint32_t P5_Error_bit = overall_parity;
 
     // Exercise 5-4: Determine error type per the table:
@@ -76,7 +68,6 @@ struct hamming_result findHammingErrors(uint32_t encoded) {
     } else if (syndrome != 0 && P5_Error_bit == 0) {
         error = DOUBLE_ERROR;
     } else {
-        // syndrome == 0 && P5_Error_bit == 1
         error = PARITY_ERROR;
     }
 
@@ -94,7 +85,7 @@ uint32_t verifyAndRepair(uint32_t encoded) {
 
     if (result.error == SINGLE_ERROR) {
         // Syndrome holds the position of the flipped bit in the encoded word
-        out = flipBit(encoded, result.syndrome);
+        out = flipBit(encoded, result.syndrome - 1);
     } else if (result.error == PARITY_ERROR) {
         // P5 itself is the bad bit — it's the MSB of the encoded word
         out = flipBit(encoded, TOTAL_BITS - 1);
@@ -113,7 +104,6 @@ uint32_t verifyAndRepair(uint32_t encoded) {
 int main(void) {
 
     /* -------- Setup Phase -------- */
-
     // Generate Random Data
     int numTests = 5;
     int pass = 1;
