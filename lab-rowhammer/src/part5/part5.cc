@@ -2,9 +2,7 @@
 #include "../verif.hh"
 
 // Convenience Array
-//
-// Value for row x column y is 1 iff
-// bit y is included in parity bit x
+
 uint8_t parity_eqs[5][16] = {                 \
     {1,1,0,1,1,0,1,0,1,0,1,1,0,1,0,1},        \
     {1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,0},        \
@@ -17,31 +15,63 @@ uint8_t parity_eqs[5][16] = {                 \
 uint32_t genParity(uint32_t data) {
     uint32_t parity = 0;
 
-    // TODO: Exercise 5-2, Generate the parity bits for the data
-    
+    // Exercise 5-2: Generate the parity bits for the data
+    for (int p = 0; p < 5; p++) {
+        uint32_t bit = 0;
+        for (int d = 0; d < 16; d++) {
+            if (parity_eqs[p][d]) {
+                bit ^= getBit(data, d);
+            }
+        }
+        parity |= (bit << p);
+    }
+
+    // P5 = XORing all of the data bits D0–D15 AND parity bits P0–P4
+    uint32_t p5 = 0;
+    for (int d = 0; d < 16; d++) {
+        p5 ^= getBit(data, d);
+    }
+    for (int p = 0; p < 5; p++) {
+        p5 ^= getBit(parity, p);
+    }
+    parity |= (p5 << 5);
+
     return parity;
 }
 
 // Determine if there are any errors, reporting the error type and syndrome.
 struct hamming_result findHammingErrors(uint32_t encoded) {
 
-    // Break down the ECC protected value into parity and data 
     hamming_struct decoded = extractEncoding(encoded);
 
-    // Record the parity in the data, and also re-generate the parity
-    // from the data
     uint32_t recordedParity = decoded.parity;
     uint32_t regenParity = genParity(decoded.data);
 
-    // TODO: Exercise 5-4, Compute the syndrome
-    uint32_t syndrome = 0;
+    uint32_t syndrome = (recordedParity ^ regenParity) & 0x1F;
 
-    // TODO: Exercise 5-4, Compute P5 Error bit
-    uint32_t P5_Error_bit = 0;
- 
-    // TODO: Exercise 5-4, Determine the error type
+    uint32_t overall_parity = 0;
+    for (int i = 0; i < TOTAL_BITS; i++) {
+        overall_parity ^= getBit(encoded, i);
+    }
+    uint32_t P5_Error_bit = overall_parity;
+
+    // Exercise 5-4: Determine error type per the table:
+    // Syndrome=0, overall=0 → NO_ERROR
+    // Syndrome!=0, overall=1 → SINGLE_ERROR (correctable)
+    // Syndrome!=0, overall=0 → DOUBLE_ERROR (uncorrectable)
+    // Syndrome=0, overall=1 → PARITY_ERROR (P5 itself flipped)
+    // As explained in the report
     _ERROR_TYPE error = NO_ERROR;
-    
+    if (syndrome == 0 && P5_Error_bit == 0) {
+        error = NO_ERROR;
+    } else if (syndrome != 0 && P5_Error_bit == 1) {
+        error = SINGLE_ERROR;
+    } else if (syndrome != 0 && P5_Error_bit == 0) {
+        error = DOUBLE_ERROR;
+    } else {
+        error = PARITY_ERROR;
+    }
+
     return {error, syndrome};
 }
 
@@ -52,8 +82,16 @@ uint32_t verifyAndRepair(uint32_t encoded) {
     // Determine the error type
     struct hamming_result result = findHammingErrors(encoded);
 
-    // TODO: Exercise 5-4, If the error type is correctable, correct it here!
     uint32_t out = encoded;
+
+    if (result.error == SINGLE_ERROR) {
+        // Syndrome holds the position of the flipped bit in the encoded word
+        out = flipBit(encoded, result.syndrome - 1);
+    } else if (result.error == PARITY_ERROR) {
+        // P5 itself is the bad bit — it's the MSB of the encoded word
+        out = flipBit(encoded, TOTAL_BITS - 1);
+    }
+    // NO_ERROR or DOUBLE_ERROR: return original unchanged
 
     return out;
 }
@@ -67,7 +105,6 @@ uint32_t verifyAndRepair(uint32_t encoded) {
 int main(void) {
 
     /* -------- Setup Phase -------- */
-
     // Generate Random Data
     int numTests = 5;
     int pass = 1;

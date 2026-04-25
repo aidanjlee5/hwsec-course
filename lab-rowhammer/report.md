@@ -30,11 +30,50 @@
 
 **Given the ECC type descriptions listed above, fill in the following table (assuming a data length of 4). For correction/detection, only answer "Yes" if it can always correct/detect (and "No" if there is ever a case where the scheme can fail to correct/detect). We've filled in the first line for you.**
 
+
+Table
+
+| | 1-Repetition (No ECC) | 2-Repetition | 3-Repetition | Single Parity Bit | Hamming(7,4) |
+|---|---|---|---|---|---|
+| **Code Rate (Data Bits / Total Bits)** | 1.0 | 0.5 | 0.33 | 0.8 | 0.57 |
+| **Max Number of Errors Can Detect** | 0 | 1 | 2 | 1 | 2 |
+| **Max Number of Errors Can Correct** | 0 | 0 | 1 | 0 | 1 |
+
+
+We know this because of the following reasons: 
+- 2-Repetition (1011 1011): A single flip makes the two copies disagree, so you know an error occurred, but you can't tell which copy is correct — no correction possible.
+- 3-Repetition (1011 1011 1011): Majority vote corrects 1 error. Two flips in the same bit position across two copies can be detected (the three copies won't all agree) but can't always be corrected.
+- Single Parity Bit: XOR of all bits changes when any 1 bit flips — detectable. Two flips cancel out — undetectable, so max detection is 1. Can never correct since you don't know which bit flipped.
+- Hamming(7,4): The overlapping parity circles let you pinpoint a single-bit error and correct it. Two errors are detectable (the syndrome is nonzero) but not correctable.
+
 ## 5-3
 
 **When a single bit flip is detected, describe how Hamming(22,16) can correct this error.**
+
+
+When a single-bit flip is detected (syndrome != 0 and overall parity = 1), the syndrome value
+directly encodes the position of the flipped bit within the 22-bit encoded word. To correct
+the error, flip that bit back by XORing the encoded word with a 1 at the position indicated
+by the syndrome. This works because Hamming parity equations are made so that each
+bit position produces a unique syndrome value.
+
+
 
 ## 5-5
 
 **Can the Hamming(22,16) code we implemented always protect us from rowhammer attacks? If not, describe how a clever attacker could work around this scheme.**
 
+
+No, Hamming(22,16) cannot always protect against Rowhammer. A clever attacker can work
+around it in two ways:
+
+- **Double bit flips in the same word**: Hamming(22,16) is SECDED — it can detect double
+  errors but cannot correct them. If the attacker flips two bits within the same 22-bit
+  protected word simultaneously, the system detects the error but cannot recover the original
+  data, causing a crash or corruption.
+
+- **Accumulated flips before a read**: ECC only corrects errors when the word is read. If
+  the attacker can induce two flips in the same word before it is read (e.g., between memory
+  scrubbing intervals), the double error goes uncorrectable. An attacker who understands the
+  scrubbing interval can time their hammering to accumulate two flips within that window,
+  bypassing ECC entirely.
