@@ -10,7 +10,7 @@
 
 // TODO: Try different combinations of these parameters to find the best ones for the machine!
 #ifndef VIC_DATA
-#define VIC_DATA 0xff
+#define VIC_DATA 0x00
 #endif
 
 #ifndef AGG_DATA
@@ -41,29 +41,33 @@ uint64_t hammer_addresses(uint64_t vict, uint64_t attA, uint64_t attB, uint64_t 
     uint64_t attA_row_base = hp_base + (((attA - hp_base) >> 17) << 17);
     uint64_t attB_row_base = hp_base + (((attB - hp_base) >> 17) << 17);
 
-    // Prime: initialize victim and aggressor rows with target data patterns.
-    memset((void *)vict_row_base, VIC_DATA, ROW_SIZE);
-    memset((void *)attA_row_base, AGG_DATA, ROW_SIZE);
-    memset((void *)attB_row_base, AGG_DATA, ROW_SIZE);
+    // Prime the whole stride span because main may select any 8KB offset inside it.
+    memset((void *)vict_row_base, VIC_DATA, ROW_STRIDE);
+    memset((void *)attA_row_base, AGG_DATA, ROW_STRIDE);
+    memset((void *)attB_row_base, AGG_DATA, ROW_STRIDE);
+
+    for (uint64_t i = 0; i < ROW_STRIDE; i += CACHELINE_SIZE) {
+        clflush((void *)(vict_row_base + i));
+        clflush((void *)(attA_row_base + i));
+        clflush((void *)(attB_row_base + i));
+    }
 
     mfence();
 
     // Hammer: repeatedly alternate accesses to aggressor rows and flush from caches.
     for (uint64_t i = 0; i < HAMMERS_PER_ITER; i++) {
-        volatile uint8_t a = *(volatile uint8_t *)attA;
-        volatile uint8_t b = *(volatile uint8_t *)attB;
-        (void)a;
-        (void)b;
+        one_block_access(attA);
+        one_block_access(attB);
 
-        clflush((volatile void *)attA);
-        clflush((volatile void *)attB);
+        clflush((void*)attA);
+        clflush((void*)attB);
     }
 
     mfence();
 
-    // Probe: any byte in victim row deviating from VIC_DATA indicates a flip.
+    // Probe the full span for flips caused by any selected column offset.
     uint8_t *vict_ptr = (uint8_t *)vict_row_base;
-    for (uint64_t i = 0; i < ROW_SIZE; i++) {
+    for (uint64_t i = 0; i < ROW_STRIDE; i++) {
         if (vict_ptr[i] != (uint8_t)VIC_DATA) {
             foundFlips = 1;
             break;
@@ -172,7 +176,7 @@ int main(int argc, char** argv) {
 
 char *dram_to_str(uint64_t phys_ptr){
     char *ret_str = (char*)malloc(64);
-	memset(ret_str, 0x00, 64);
+    memset(ret_str, 0x00, 64);
     sprintf(ret_str, "bk:%ld, row:%05ld, col:%05ld", phys_to_bankid(phys_ptr, BANK_FUNC_CAND), phys_to_rowid(phys_ptr), phys_to_colid(phys_ptr));
     return ret_str;
 }

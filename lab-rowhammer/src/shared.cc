@@ -16,11 +16,11 @@ void * allocated_mem;
  * Populates the Physical Page Number -> Virtual Page Number mapping table
  *
  * Inputs: mem_map - Base pointer to the large allocated pool
- *         PPN_VPN_map - Reference to a PPN->VPN map 
+ * PPN_VPN_map - Reference to a PPN->VPN map 
  *
  * Side-Effects: For *each page* in the allocated pool, the virtual page 
- *               number is into the map with a key corresponding to the 
- *               page's physical page number.
+ * number is into the map with a key corresponding to the 
+ * page's physical page number.
  *
  */
 void setup_PPN_VPN_map(void * mem_map,
@@ -67,15 +67,14 @@ void * allocate_pages(uint64_t memory_size) {
     return memory_block;
 }
 
-/* 
- * virt_to_phys
+/* * virt_to_phys
  *
  * Determines the physical address mapped to by a given virtual address
  *
  * Inputs: virt_addr - A virtual pointer/address
  * Output: phys_ptr - The physical address corresponding to the virtual pointer
- *                    IMPORTANT: If the virtual pointer is not currently
- *                               present, return 0
+ * IMPORTANT: If the virtual pointer is not currently
+ * present, return 0
  *
  */
 
@@ -118,7 +117,7 @@ uint64_t virt_to_phys(uint64_t virt_addr) {
  *
  * Inputs: phys_addr - A physical pointer/address
  * Output: virt_addr - The virtual address corresponding to the physical pointer
- *                     If the physical pointer is not mapped, return 0
+ * If the physical pointer is not mapped, return 0
  *
  */
 
@@ -161,7 +160,7 @@ char* get_rand_addr(size_t buf_size)
  * and returns its timing characteristics.
  *
  * Inputs: addr_A/addr_B - Two (virtual) addresses used to observe
- *                         potential contention
+ * potential contention
  * Output: Timing difference (derived by a scheme of your choice)
  *
  */
@@ -171,16 +170,19 @@ uint64_t measure_bank_latency(volatile char *addr_A, volatile char *addr_B) {
     mfence();
 
     lfence();
-    uint64_t t_start = rdtscp64();
+    uint64_t start = rdtscp64();
 
-    volatile uint8_t a = *(volatile uint8_t *)addr_A;
-    volatile uint8_t b = *(volatile uint8_t *)addr_B;
-    (void)a;
-    (void)b;
+    uint8_t a = *(volatile uint8_t*)addr_A;
+    asm volatile("" ::: "memory");
+    uint8_t b = *(volatile uint8_t*)addr_B;
+
+    uint64_t sink = a + b;
+    asm volatile("" :: "r"(sink) : "memory");
 
     lfence();
-    uint64_t t_end = rdtscp64();
-    return t_end - t_start;
+    uint64_t end = rdtscp64();
+
+    return end - start;
 }
 
 /*
@@ -242,7 +244,7 @@ uint64_t phys_to_bankid(uint64_t phys_ptr, uint8_t candidate)
  */
 
 uint64_t phys_to_rowid(uint64_t phys_ptr){
-	return (phys_ptr & ROW_MASK) >> __builtin_ctzl(ROW_MASK);
+    return (phys_ptr & ROW_MASK) >> __builtin_ctzl(ROW_MASK);
 }
 
 /*
@@ -258,4 +260,3 @@ uint64_t phys_to_rowid(uint64_t phys_ptr){
 uint64_t phys_to_colid(uint64_t phys_ptr){
     return (phys_ptr & COL_MASK) >> __builtin_ctzl(COL_MASK);
 }
-
