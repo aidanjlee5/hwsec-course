@@ -6,25 +6,54 @@
 
 **In a 2GB buffer, how many 2MB hugepages are there?**
 
+4KB pages: bits 0-11 are page offset (12 bits), bits 12-63 are page number
+2MB pages: bits 0-20 are page offset (21 bits), bits 21-63 are page number
+2GB / 2MB = 1024 hugepages
+
 ## 2-1
 
 **Given a victim address 0x96ec3000, what is the value of its Row id? The value of its Column id?**
 
 **For the same address, assume an arbitrary XOR function for computing the Bank id, list all possible attacker addresses whose Row id is one more than 0x96ec3000's Row id and all the other ids match, including the Bank id and Column id. Hint: there should be 16 such addresses total.**
 
+0x96ee1000
+0x96ee3000
+0x96ee5000
+0x96ee7000
+0x96ee9000
+0x96eeb000
+0x96eed000
+0x96eef000
+0x96ef1000
+0x96ef3000
+0x96ef5000
+0x96ef7000
+0x96ef9000
+0x96efb000
+0x96efd000
+0x96eff000
+
 ## 2-3
 
 **Analyze the statistics produced by your code when running part2, and report a threshold to distinguish the bank conflict.**
+The threshold was 400 cycles
 
 ## 3-2
 
 **Based on the XOR function you reverse-engineered, determine which of the 16 candidate addresses you derived in Discussion Question 2-1 maps to the same bank.**
+Using XOR bank function (function 0), we calculated the bank id of the target address and the bank's 16 candidate addresses. The 0x96ee7000 address produced the same bank id (6) as the target address; therefore, 0x96ee7000 is the candidate that is mapped to the same bank.
 
 ## 4-2
 
 **The default data pattern in part4.cc is to set aggressor rows to all 1’s and victim row to all 0’s. Try different data pattern and include the bitflip observation statistics in the table below. Then answer the following questions:**
 
 **Do your results match your expectations? What is the best pattern to trigger flips effectively?**
+| Data Pattern (Victim/Aggressor) | 0x00/0xff | 0xff/0x00 | 0x00/0x00 | 0xff/0xff |
+| Number of Flips (100 trials) | 93 | 94 | 91 | 92 |
+
+The research findings indicate the likelihood of having many bit-flips regardless of which of the 4 patterns the data falls into. The results had less variation that expected because it was hypothesized that the most extreme opposite pairing of aggressor/victim data (0x00 paired with 0xff) would produce the highest number of flips because of the high level of contrast between the two data types. However, all 4 data types produced very similar results, as there were between 91-94 successful bit-flip tests out of 100 for each of the data types.
+
+The pairing of data types (0xff/0x00) yielded the greatest number of successful test results with a total of 94 successful bit-flip tests out of 100. Because there was such a small number of difference in successful bit-flip tests between all patterns, we conclude that this machine would be highly susceptible to using all four data pairs for creating bit-flips. The pairing of data types (0xff/0x00) was the most successful during our testing.
 
 ## 5-1
 
